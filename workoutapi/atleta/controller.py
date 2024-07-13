@@ -1,7 +1,12 @@
 from datetime import datetime
 from uuid import uuid4
-from fastapi import APIRouter, Body, HTTPException, status
+from fastapi import FastApi, APIRouter, Body, HTTPException, status
+from fastapi_pagination import Page, add_pagination, paginate
 from pydantic import UUID4
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError, ProgrammingError
+from psycopg2.errors import UniqueViolation
+
 
 from workoutapi.atleta.schemas import AtletaIn, AtletaOut, AtletaUpdate
 from workoutapi.atleta.models import AtletaModel
@@ -56,6 +61,20 @@ async def post(
 
         db_session.add(atleta_model)
         await db_session.commit()
+
+    except IntegrityError as exc:
+        if isinstance(exc.orig, UniqueViolation):
+            conflicting_cpf = exc.params.get('cpf')
+            return JSONResponse(
+                status_code=status.HTTP_303_SEE_OTHER,
+                content={"message": f"Já existe um atleta cadastrado com o cpf: {conflicting_cpf}"}
+            )
+        else:
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"message": "Erro de integridade de dados"}
+            )
+        
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -70,10 +89,13 @@ async def post(
         status_code=status.HTTP_200_OK,
         response_model=list[AtletaOut],
 )
-async def query(db_session: DatabaseDependency) -> list[AtletaOut]:
-    atletas: list[AtletaOut] = (await db_session.execute(select(AtletaModel))).scalars().all()
+async def query(db_session: DatabaseDependency, page: int = 1, size: int = 10) -> Page[AtletaOut]:
+    atletas_query = select(AtletaModel)
+    atletas = await db_session.execute(atletas_query)
 
-    return [AtletaOut.model_validate(atleta) for atleta in atletas]
+    return paginate([AtletaOut.model_validate(atleta) for atleta in atletas.scalars().all()], page, size)
+
+add_pagination(router) 
 
 @router.get(
         "/{id}",
