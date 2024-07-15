@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError, ProgrammingError
 from psycopg2.errors import UniqueViolation
 
 
+
 from workoutapi.atleta.schemas import AtletaIn, AtletaOut, AtletaUpdate
 from workoutapi.atleta.models import AtletaModel
 from categorias.models import CategoriaModel
